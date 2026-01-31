@@ -18,8 +18,9 @@ export default function MetricsGrid({
   lastUpdated,
   isOvercurrent,
 }: MetricsGridProps) {
-  const formatUptime = (ms: number) => {
-    const seconds = Math.floor(ms / 1000);
+  const formatUptime = (seconds: number) => {
+    // Input is already in seconds from process.uptime()
+    seconds = Math.floor(seconds);
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
