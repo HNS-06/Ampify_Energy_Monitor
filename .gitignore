@@ -1,0 +1,27 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build
+dist
+build
+out
+.next
+.docusaurus
+
+# OS
+.DS_Store
+Thumbs.db
+.idea
+.vscode
+*.log
+
+# Dfinity / ICP
+.dfx
+.vessel
+market
