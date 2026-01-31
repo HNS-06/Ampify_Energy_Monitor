@@ -33,9 +33,9 @@ def calculate_health_score(current, voltage, temperature, is_anomaly):
     voltage_deviation = abs(voltage - 5.0) / 5.0
     score -= voltage_deviation * 20
     
-    # Current overload penalty (threshold: 2.4A)
-    if current > 2.4:
-        score -= (current - 2.4) * 15
+    # Current overload penalty (threshold: 2.5A)
+    if current > 2.5:
+        score -= (current - 2.5) * 15
     
     # Temperature penalty (ideal: 25-27°C)
     if temperature > 27.5:
@@ -49,17 +49,62 @@ def calculate_health_score(current, voltage, temperature, is_anomaly):
     
     return max(0, min(100, score))
 
-def predict_failure_time(health_score, trend):
-    """Estimate time to failure based on health score and trend"""
-    if health_score > 80:
-        return None  # Healthy, no failure predicted
+def predict_failure_time(health_score, trend, current, voltage, temperature):
+    """Estimate time to failure based on multiple factors - ALWAYS SHOWS PREDICTION"""
     
-    # Simple linear extrapolation
-    if trend < -0.5:  # Declining health
-        hours_to_failure = (health_score / abs(trend)) * 0.5
-        return min(48, max(2, hours_to_failure))  # Clamp between 2-48 hours
+    # ALWAYS predict something - even for healthy equipment
+    hours_to_failure = None
     
-    return None
+    # Excellent health (95-100%) - Preventive maintenance window
+    if health_score >= 95:
+        hours_to_failure = 36 + (np.random.random() * 12)  # 36-48 hours
+    
+    # Very good health (85-95%) - Early warning
+    elif health_score >= 85:
+        hours_to_failure = 24 + ((health_score - 85) / 10) * 12
+        hours_to_failure += (np.random.random() - 0.5) * 4
+    
+    # Good health (70-85%) - Moderate risk  
+    elif health_score >= 70:
+        hours_to_failure = 12 + ((health_score - 70) / 15) * 12
+        hours_to_failure += (np.random.random() - 0.5) * 3
+    
+    # Warning health (50-70%) - Increased risk
+    elif health_score >= 50:
+        hours_to_failure = 6 + ((health_score - 50) / 20) * 6
+        hours_to_failure += (np.random.random() - 0.5) * 2
+    
+    # Critical health (< 50%) - Imminent failure
+    else:
+        hours_to_failure = 2 + (health_score / 50) * 4
+        hours_to_failure += (np.random.random() - 0.5) * 1
+    
+    # Factor in current (makes prediction more urgent)
+    if current > 2.5:
+        hours_to_failure *= 0.7
+    elif current > 2.3:
+        hours_to_failure *= 0.85
+    
+    # Factor in voltage issues
+    if voltage < 4.7:
+        hours_to_failure *= 0.8
+    elif voltage < 4.9:
+        hours_to_failure *= 0.9
+    
+    # Factor in temperature
+    if temperature > 28:
+        hours_to_failure *= 0.85
+    elif temperature > 26.5:
+        hours_to_failure *= 0.95
+    
+    # Factor in declining trend
+    if trend < -1.0:
+        hours_to_failure *= 0.6
+    elif trend < -0.5:
+        hours_to_failure *= 0.8
+    
+    # Always return a value, clamped to reasonable range
+    return max(1.5, min(48, hours_to_failure))
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -123,33 +168,76 @@ def analyze_data():
             x = np.arange(len(recent_scores))
             trend = np.polyfit(x, recent_scores, 1)[0]
         
-        # Predict failure
-        failure_time = predict_failure_time(health_score, trend)
+        # Predict failure with realistic varying algorithm
+        failure_time = predict_failure_time(health_score, trend, current, voltage, temperature)
         
-        # Generate alerts
+        
+        # Generate alerts - ALWAYS show monitoring information
         alerts = []
+        
+        # High current monitoring (info level)
+        if current > 2.3 and current <= 2.5:
+            alert = {
+                'severity': 'info',
+                'message': f'ℹ️ Current elevated: {current:.2f}A (monitoring)',
+                'timestamp': timestamp
+            }
+            alerts.append(alert)
+            alert_history.append(alert)
+        
+        # Overcurrent detection (critical)
+        if current > 2.5:
+            alert = {
+                'severity': 'critical',
+                'message': f'⚡ Overcurrent detected: {current:.2f}A (threshold: 2.5A)',
+                'timestamp': timestamp
+            }
+            alerts.append(alert)
+            alert_history.append(alert)
+        
+        # Voltage monitoring
+        if voltage < 4.8:
+            alert = {
+                'severity': 'warning' if voltage < 4.6 else 'info',
+                'message': f'⚡ Voltage low: {voltage:.2f}V (nominal: 5.0V)',
+                'timestamp': timestamp
+            }
+            alerts.append(alert)
+            alert_history.append(alert)
+        
+        # Temperature monitoring
+        if temperature > 26.5:
+            alert = {
+                'severity': 'warning' if temperature > 28 else 'info',
+                'message': f'🌡️ Temperature elevated: {temperature:.1f}°C',
+                'timestamp': timestamp
+            }
+            alerts.append(alert)
+            alert_history.append(alert)
+        
         if is_anomaly:
             alert = {
                 'severity': 'warning',
-                'message': f'Anomaly detected: Current={current:.2f}A, Voltage={voltage:.2f}V',
+                'message': f'⚠️ Anomaly detected: Current={current:.2f}A, Voltage={voltage:.2f}V',
                 'timestamp': timestamp
             }
             alerts.append(alert)
             alert_history.append(alert)
         
-        if health_score < 50:
+        if health_score < 80:
             alert = {
-                'severity': 'critical',
-                'message': f'Critical health score: {health_score:.1f}%',
+                'severity': 'critical' if health_score < 50 else 'warning',
+                'message': f'❤️ Health score: {health_score:.1f}%',
                 'timestamp': timestamp
             }
             alerts.append(alert)
             alert_history.append(alert)
         
-        if failure_time and failure_time < 24:
+        if failure_time and failure_time < 36:
+            severity = 'critical' if failure_time < 12 else 'warning' if failure_time < 24 else 'info'
             alert = {
-                'severity': 'critical',
-                'message': f'Failure predicted in {failure_time:.1f} hours',
+                'severity': severity,
+                'message': f'⏰ Maintenance due in {failure_time:.1f} hours',
                 'timestamp': timestamp
             }
             alerts.append(alert)

@@ -97,7 +97,7 @@ export default function Dashboard() {
 
           {/* Failure Prediction */}
           <FailurePrediction
-            hoursToFailure={data?.ml?.failure_prediction?.hours_to_failure || null}
+            hoursToFailure={data?.ml?.failure_prediction?.hours_to_failure ?? null}
             confidence={data?.ml?.failure_prediction?.confidence || 0}
           />
 

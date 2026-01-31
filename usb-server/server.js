@@ -129,90 +129,92 @@ setInterval(() => {
         // Create different scenarios based on cycle
         let current, voltage, temperature;
 
-        // Every 15 seconds, create an ANOMALY SPIKE
-        if (simulationCycle % 15 === 0) {
-            console.log('🚨 SIMULATING ANOMALY SPIKE!');
-            current = 2.8 + Math.random() * 0.5;  // Overcurrent spike!
-            voltage = 4.5 + Math.random() * 0.3;  // Voltage drop!
-            temperature = 29 + Math.random() * 3; // Temperature surge!
-            healthDegradation += 5; // Degrade health
+        // Every 20 seconds, create an ANOMALY SPIKE (overcurrent)
+        if (simulationCycle % 20 === 0) {
+            console.log('🚨 SIMULATING ANOMALY SPIKE - OVERCURRENT!');
+            current = 2.6 + Math.random() * 0.4;  // Spike to 2.6-3.0A
+            voltage = 4.5 + Math.random() * 0.3;
+            temperature = 28 + Math.random() * 2;
+            healthDegradation += 3;
         }
-        // Every 10 seconds, create DEGRADED CONDITIONS
-        else if (simulationCycle % 10 === 0) {
-            console.log('⚠️ SIMULATING DEGRADED CONDITIONS');
-            current = 2.5 + Math.random() * 0.2;
-            voltage = 4.7 + Math.random() * 0.4;
-            temperature = 27.5 + Math.random() * 1.5;
-            healthDegradation += 2;
+        // Every 35 seconds, create MODERATE DEGRADATION
+        else if (simulationCycle % 35 === 0) {
+            console.log('⚠️ SIMULATING MODERATE DEGRADATION');
+            current = 2.4 + Math.random() * 0.15;  // 2.4-2.55A (near threshold)
+            voltage = 4.7 + Math.random() * 0.2;
+            temperature = 27 + Math.random() * 1;
+            healthDegradation += 1;
         }
-        // Normal operation with slight variations
+        // NORMAL OPERATION (80% of the time)
         else {
-            current = 2.2 + Math.random() * 0.3;
-            voltage = 4.9 + Math.random() * 0.3;
-            temperature = 25.5 + Math.random() * 1.5;
-            // Slowly recover health
-            if (healthDegradation > 0) healthDegradation -= 0.5;
+            // Realistic normal operation: 2.0-2.5A
+            current = 2.0 + Math.random() * 0.5;  // Random between 2.0-2.5A
+            voltage = 4.9 + Math.random() * 0.2;   // 4.9-5.1V (normal)
+            temperature = 25 + Math.random() * 1.5; // 25-26.5°C (normal)
+
+            // Gradual health recovery during normal operation
+            if (healthDegradation > 0) {
+                healthDegradation -= 0.2;
+            }
         }
 
-        // Every 30 seconds, inject a CRITICAL FAULT
-        if (simulationCycle % 30 === 0) {
-            console.log('💥 SIMULATING CRITICAL FAULT!');
-            current = 3.2; // Severe overcurrent
-            voltage = 4.2; // Severe undervoltage
-            temperature = 32; // Overheating
-            healthDegradation = 50; // Major health hit
+        // Every 60 seconds, inject a CRITICAL FAULT (rare event)
+        if (simulationCycle % 60 === 0) {
+            console.log('💥 CRITICAL FAULT - SEVERE OVERCURRENT!');
+            current = 3.0 + Math.random() * 0.3; // Severe: 3.0-3.3A
+            voltage = 4.3;
+            temperature = 31;
+            healthDegradation += 10;
         }
 
-        // Apply health degradation to values
+        // Apply health degradation (subtle effect)
         const degradationFactor = healthDegradation / 100;
-        voltage -= degradationFactor * 0.5;
-        current += degradationFactor * 0.3;
-        temperature += degradationFactor * 2;
+        voltage -= degradationFactor * 0.3;
+        current += degradationFactor * 0.2;
+        temperature += degradationFactor * 1.5;
 
         latestData = {
             current: Math.max(0, current),
             voltage: Math.max(4.0, Math.min(5.5, voltage)),
             load: current > 1.5,
-            overcurrent: current > 2.4,
+            overcurrent: current > 2.5,  // Changed threshold to 2.5A
             uptime: process.uptime(),
             temperature: Math.max(20, Math.min(35, temperature)),
             timestamp: Date.now()
         };
 
-        // Reset cycle and degradation periodically
-        if (simulationCycle > 60) {
+        // Reset cycle and recover health
+        if (simulationCycle > 120) {
             simulationCycle = 0;
-            healthDegradation = 0;
-            console.log('🔄 SIMULATION RESET - Back to normal operation');
+            healthDegradation = Math.max(0, healthDegradation - 5);
+            console.log('🔄 SIMULATION CYCLE RESET');
         }
     }
 }, 1000);
 
-// API Endpoint with ML integration
-app.get('/api/data', async (req, res) => {
+// Cache for ML analysis (updated in background)
+let cachedMLAnalysis = null;
+
+// Background ML analysis (non-blocking)
+setInterval(async () => {
     try {
-        // Try to get ML analysis
-        let mlAnalysis = null;
-        try {
-            const mlResponse = await axios.post('http://localhost:5000/analyze', latestData, {
-                timeout: 1000
-            });
-            mlAnalysis = mlResponse.data;
-        } catch (mlError) {
-            console.warn('ML service unavailable, returning data without predictions');
-        }
-
-        // Combine sensor data with ML predictions
-        const response = {
-            ...latestData,
-            ml: mlAnalysis
-        };
-
-        res.json(response);
-    } catch (error) {
-        console.error('Error in /api/data:', error.message);
-        res.json(latestData); // Fallback to basic data
+        const mlResponse = await axios.post('http://localhost:5000/analyze', latestData, {
+            timeout: 500
+        });
+        cachedMLAnalysis = mlResponse.data;
+    } catch (mlError) {
+        // Silently fail, keep using cached data
     }
+}, 2000); // Update ML every 2 seconds
+
+// API Endpoint - INSTANT response with cached ML data
+app.get('/api/data', (req, res) => {
+    // Return immediately with cached ML data
+    const response = {
+        ...latestData,
+        ml: cachedMLAnalysis
+    };
+    res.json(response);
 });
 
 app.listen(PORT, () => {
