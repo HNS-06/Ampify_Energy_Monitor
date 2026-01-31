@@ -8,6 +8,22 @@ export interface ESP8266Data {
   uptime: number;
   temperature: number;
   timestamp: number;
+  ml?: {
+    health_score: number;
+    is_anomaly: boolean;
+    anomaly_score: number;
+    trend: number;
+    failure_prediction: {
+      hours_to_failure: number | null;
+      confidence: number;
+    };
+    alerts: Array<{
+      severity: 'info' | 'warning' | 'critical';
+      message: string;
+      timestamp: number;
+    }>;
+    data_points_analyzed: number;
+  };
 }
 
 interface UseESP8266DataReturn {

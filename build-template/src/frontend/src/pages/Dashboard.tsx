@@ -6,6 +6,9 @@ import OvercurrentAlert from '../components/OvercurrentAlert';
 import TemperatureCard from '../components/TemperatureCard';
 import MetricsGrid from '../components/MetricsGrid';
 import PredictionMetrics from '../components/PredictionMetrics';
+import HealthScore from '../components/HealthScore';
+import FailurePrediction from '../components/FailurePrediction';
+import AnomalyAlerts from '../components/AnomalyAlerts';
 import LoadingSkeleton from '../components/LoadingSkeleton';
 import ErrorDisplay from '../components/ErrorDisplay';
 import { useESP8266Data } from '../hooks/useESP8266Data';
@@ -78,6 +81,32 @@ export default function Dashboard() {
         lastUpdated={data?.timestamp || Date.now()}
         isOvercurrent={data?.overcurrent || false}
       />
+
+      {/* Predictive Maintenance Section */}
+      <div className="space-y-4">
+        <h2 className="text-2xl font-bold bg-gradient-to-r from-chart-3 to-chart-4 bg-clip-text text-transparent">
+          Predictive Maintenance
+        </h2>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Health Score */}
+          <HealthScore
+            score={data?.ml?.health_score || 100}
+            trend={data?.ml?.trend || 0}
+          />
+
+          {/* Failure Prediction */}
+          <FailurePrediction
+            hoursToFailure={data?.ml?.failure_prediction?.hours_to_failure || null}
+            confidence={data?.ml?.failure_prediction?.confidence || 0}
+          />
+
+          {/* Anomaly Alerts */}
+          <AnomalyAlerts
+            alerts={data?.ml?.alerts || []}
+          />
+        </div>
+      </div>
 
       {/* Prediction Metrics */}
       <PredictionMetrics />
