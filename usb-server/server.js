@@ -6,6 +6,7 @@ const axios = require('axios');
 
 const app = express();
 const PORT = 4000;
+const TELEGRAM_BOT_URL = 'http://localhost:5001'; // Telegram bot service
 
 app.use(cors());
 app.use(express.json());
@@ -129,20 +130,20 @@ setInterval(() => {
         // Create different scenarios based on cycle
         let current, voltage, temperature;
 
-        // Every 20 seconds, create an ANOMALY SPIKE (overcurrent)
-        if (simulationCycle % 20 === 0) {
-            console.log('🚨 SIMULATING ANOMALY SPIKE - OVERCURRENT!');
-            current = 2.6 + Math.random() * 0.4;  // Spike to 2.6-3.0A
-            voltage = 4.5 + Math.random() * 0.3;
-            temperature = 28 + Math.random() * 2;
-            healthDegradation += 3;
+        // RARE: Overcurrent spike every 2.5 minutes (150 seconds)
+        if (simulationCycle % 150 === 0) {
+            console.log('🚨 OVERCURRENT SPIKE!');
+            current = 2.55 + Math.random() * 0.25;  // 2.55-2.8A (overcurrent)
+            voltage = 4.6 + Math.random() * 0.3;
+            temperature = 27.5 + Math.random() * 1.5;
+            healthDegradation += 5;
         }
-        // Every 35 seconds, create MODERATE DEGRADATION
-        else if (simulationCycle % 35 === 0) {
-            console.log('⚠️ SIMULATING MODERATE DEGRADATION');
-            current = 2.4 + Math.random() * 0.15;  // 2.4-2.55A (near threshold)
-            voltage = 4.7 + Math.random() * 0.2;
-            temperature = 27 + Math.random() * 1;
+        // OCCASIONAL: Near-threshold (every 60 seconds, but not on overcurrent cycles)
+        else if (simulationCycle % 60 === 0 && simulationCycle % 150 !== 0 && simulationCycle % 300 !== 0) {
+            console.log('⚠️ NEAR THRESHOLD');
+            current = 2.35 + Math.random() * 0.15;  // 2.35-2.5A (close but usually safe)
+            voltage = 4.8 + Math.random() * 0.2;
+            temperature = 26.5 + Math.random() * 1;
             healthDegradation += 1;
         }
         // NORMAL OPERATION (80% of the time)
@@ -158,20 +159,20 @@ setInterval(() => {
             }
         }
 
-        // Every 60 seconds, inject a CRITICAL FAULT (rare event)
-        if (simulationCycle % 60 === 0) {
+        // VERY RARE: Critical fault every 5 minutes (300 seconds)
+        if (simulationCycle % 300 === 0) {
             console.log('💥 CRITICAL FAULT - SEVERE OVERCURRENT!');
-            current = 3.0 + Math.random() * 0.3; // Severe: 3.0-3.3A
-            voltage = 4.3;
-            temperature = 31;
-            healthDegradation += 10;
+            current = 2.8 + Math.random() * 0.2; // Severe: 2.8-3.0A
+            voltage = 4.3 + Math.random() * 0.2;
+            temperature = 30 + Math.random() * 2;
+            healthDegradation += 15;
         }
 
-        // Apply health degradation (subtle effect)
+        // Apply health degradation (very subtle effect)
         const degradationFactor = healthDegradation / 100;
-        voltage -= degradationFactor * 0.3;
-        current += degradationFactor * 0.2;
-        temperature += degradationFactor * 1.5;
+        voltage -= degradationFactor * 0.2;
+        current += degradationFactor * 0.1;
+        temperature += degradationFactor * 0.5;
 
         latestData = {
             current: Math.max(0, current),
@@ -183,11 +184,11 @@ setInterval(() => {
             timestamp: Date.now()
         };
 
-        // Reset cycle and recover health
-        if (simulationCycle > 120) {
+        // Reset cycle and recover health gradually
+        if (simulationCycle > 600) {  // Every 10 minutes
             simulationCycle = 0;
-            healthDegradation = Math.max(0, healthDegradation - 5);
-            console.log('🔄 SIMULATION CYCLE RESET');
+            healthDegradation = Math.max(0, healthDegradation - 10);
+            console.log('🔄 SIMULATION CYCLE RESET - Health recovery');
         }
     }
 }, 1000);
@@ -202,10 +203,30 @@ setInterval(async () => {
             timeout: 500
         });
         cachedMLAnalysis = mlResponse.data;
+
+        // Forward alerts to Telegram bot
+        if (cachedMLAnalysis && cachedMLAnalysis.alerts && cachedMLAnalysis.alerts.length > 0) {
+            cachedMLAnalysis.alerts.forEach(alert => {
+                sendTelegramAlert(alert).catch(err => {
+                    // Silently fail if bot is not running
+                });
+            });
+        }
     } catch (mlError) {
         // Silently fail, keep using cached data
     }
 }, 2000); // Update ML every 2 seconds
+
+// Function to send alerts to Telegram bot
+async function sendTelegramAlert(alert) {
+    try {
+        await axios.post(`${TELEGRAM_BOT_URL}/alert`, alert, {
+            timeout: 1000
+        });
+    } catch (error) {
+        // Bot service not available
+    }
+}
 
 // API Endpoint - INSTANT response with cached ML data
 app.get('/api/data', (req, res) => {
